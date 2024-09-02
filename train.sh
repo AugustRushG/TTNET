@@ -17,7 +17,7 @@ python main.py \
   --seg_weight 1. \
   --no_local \
   --no_event \
-  --smooth-labelling
+  --smooth-labellingn
 
 # The second phase: Freeze the segmentation and the global modules
 
