@@ -97,6 +97,46 @@ class BallDetection(nn.Module):
         out = self.sigmoid(self.fc3(x))
         return out, features, out_block2, out_block3, out_block4, out_block5
 
+class BallDetection_right(nn.Module):
+    def __init__(self, num_frames_sequence, dropout_p):
+        super(BallDetection_right, self).__init__()
+        self.conv1 = nn.Conv2d(num_frames_sequence * 3, 64, kernel_size=1, stride=1, padding=0)
+        self.batchnorm = nn.BatchNorm2d(64)
+        self.relu = nn.ReLU()
+        self.convblock1 = ConvBlock(in_channels=64, out_channels=64)
+        self.convblock2 = ConvBlock(in_channels=64, out_channels=64)
+        self.dropout2d = nn.Dropout2d(p=dropout_p)
+        self.convblock3 = ConvBlock(in_channels=64, out_channels=128)
+        self.convblock4 = ConvBlock(in_channels=128, out_channels=128)
+        self.convblock5 = ConvBlock(in_channels=128, out_channels=256)
+        self.convblock6 = ConvBlock(in_channels=256, out_channels=256)
+        self.fc1 = nn.Linear(in_features=2560, out_features=1792)
+        self.fc2 = nn.Linear(in_features=1792, out_features=896)
+        self.fcx = nn.Linear(in_features=896, out_features=320)
+        self.fcy = nn.Linear(in_features=896, out_features=128)
+        self.dropout1d = nn.Dropout(p=dropout_p)
+        self.sigmoid = nn.Sigmoid()
+
+    def forward(self, x):
+        x = self.relu(self.batchnorm(self.conv1(x)))
+        out_block2 = self.convblock2(self.convblock1(x))
+        x = self.dropout2d(out_block2)
+        out_block3 = self.convblock3(x)
+        out_block4 = self.convblock4(out_block3)
+        x = self.dropout2d(out_block4)
+        out_block5 = self.convblock5(out_block4)
+        features = self.convblock6(out_block5)
+
+        x = self.dropout2d(features)
+        x = x.contiguous().view(x.size(0), -1)
+
+        x = self.dropout1d(self.relu(self.fc1(x)))
+        x = self.dropout1d(self.relu(self.fc2(x)))
+        coordx = self.sigmoid(self.fcx(x))
+        coordy = self.sigmoid(self.fcy(x))
+        out = (coordx, coordy)
+        return out, features, out_block2, out_block3, out_block4, out_block5
+
 
 class EventsSpotting(nn.Module):
     def __init__(self, dropout_p):
@@ -165,7 +205,8 @@ class TTNet(nn.Module):
         super(TTNet, self).__init__()
         self.tasks = tasks
         self.ball_local_stage, self.events_spotting, self.segmentation = None, None, None
-        self.ball_global_stage = BallDetection(num_frames_sequence=num_frames_sequence, dropout_p=dropout_p)
+        # self.ball_global_stage = BallDetection(num_frames_sequence=num_frames_sequence, dropout_p=dropout_p)
+        self.ball_global_stage = BallDetection_right(num_frames_sequence=num_frames_sequence, dropout_p=dropout_p)
         if 'local' in tasks:
             self.ball_local_stage = BallDetection(num_frames_sequence=num_frames_sequence, dropout_p=dropout_p)
         if 'event' in tasks:
@@ -187,6 +228,8 @@ class TTNet(nn.Module):
         pred_ball_local, pred_events, pred_seg, local_ball_pos_xy = None, None, None, None
 
         # Normalize the input before compute forward propagation
+        # pred_ball_global, global_features, out_block2, out_block3, out_block4, out_block5 = self.ball_global_stage(
+        #     self.__normalize__(resize_batch_input))
         pred_ball_global, global_features, out_block2, out_block3, out_block4, out_block5 = self.ball_global_stage(
             self.__normalize__(resize_batch_input))
         if self.ball_local_stage is not None:
